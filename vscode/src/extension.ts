@@ -2,25 +2,31 @@ import * as path from "path";
 import { workspace, ExtensionContext } from "vscode";
 
 import {
+  Executable,
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
-  TransportKind,
 } from "vscode-languageclient/node";
+import * as vscode from "vscode";
 
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-  const serverModule = context.asAbsolutePath(
-    path.join("server", "out", "server.js"),
-  );
+  const javaHome = process.env["JAVA_HOME"];
+  if (!javaHome) {
+    vscode.window.showErrorMessage("JAVA_HOME is not set");
+    return;
+  }
+  vscode.window.showInformationMessage(`Detected JAVA_HOME ${javaHome}`);
 
+  const javaExecutable: Executable = {
+    command: javaHome,
+    // TODO: make this configurable
+    args: ["-jar", "../../build/libs/kotlin-analyzer-0.1.0.jar"],
+  };
   const serverOptions: ServerOptions = {
-    run: { module: serverModule, transport: TransportKind.ipc },
-    debug: {
-      module: serverModule,
-      transport: TransportKind.ipc,
-    },
+    run: javaExecutable,
+    debug: javaExecutable,
   };
 
   const clientOptions: LanguageClientOptions = {
@@ -34,7 +40,7 @@ export function activate(context: ExtensionContext) {
     "vscodeKotlinAnalyzerClient",
     "Kotlin Analyzer VScode Client",
     serverOptions,
-    clientOptions,
+    clientOptions
   );
 
   client.start();
