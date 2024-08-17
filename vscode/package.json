@@ -1,0 +1,64 @@
+{
+  "name": "vscode-kotlin-analyzer",
+  "version": "0.1.0",
+  "description": "kotlin-analyzer client for vscode",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuk1ty/vscode-kotlin-analyzer.git"
+  },
+  "author": "Yuki Toyoda",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "activationEvents": [
+		"onLanguage:kotlin"
+	],
+	"main": "./out/extension",
+  "languages": [{
+    "id": "kotlin",
+    "extensions": [".kt", ".kts"],
+    "aliases": ["Kotlin", "kotlin"]
+  }],
+	"contributes": {
+		"configuration": {
+			"type": "object",
+			"title": "Example configuration",
+			"properties": {
+				"languageServerExample.maxNumberOfProblems": {
+					"scope": "resource",
+					"type": "number",
+					"default": 100,
+					"description": "Controls the maximum number of problems produced by the server."
+				},
+				"languageServerExample.trace.server": {
+					"scope": "window",
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "off",
+					"description": "Traces the communication between VS Code and the language server."
+				}
+			}
+		}
+	},
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.92.0",
+    "vscode-test": "^1.6.1",
+    "@types/node": "^18.14.6",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "typescript": "^5.3.3"
+  }
+}
