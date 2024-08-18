@@ -20,9 +20,14 @@ export function activate(context: ExtensionContext) {
   vscode.window.showInformationMessage(`Detected JAVA_HOME ${javaHome}`);
 
   const javaExecutable: Executable = {
-    command: javaHome,
+    // command: javaHome,
+    command: "java",
     // TODO: make this configurable
-    args: ["-jar", "../../build/libs/kotlin-analyzer-0.1.0.jar"],
+    args: [
+      "-jar",
+      "/Users/helloyuki/github/github.com/yuk1ty/kotlin-analyzer/kotlin-analyzer/build/libs/kotlin-analyzer-0.1.0.jar",
+    ],
+    // args: ["-jar", "../../build/libs/kotlin-analyzer-0.1.0.jar"],
   };
   const serverOptions: ServerOptions = {
     run: javaExecutable,
