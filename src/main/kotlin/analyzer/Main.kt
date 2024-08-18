@@ -23,6 +23,7 @@ fun main(args: Array<String>) {
     binding {
         val launcher = runCatching { LSPLauncher.createServerLauncher(server, systemIn, systemOut, ec) { it } }.bind()
         logger.info { "Server is starting" }
+        server.connect(launcher.remoteProxy)
         runCatching { launcher.startListening().get() }
     }.getOrThrow()
 }
