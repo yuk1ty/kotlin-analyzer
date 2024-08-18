@@ -2,6 +2,7 @@ package analyzer
 
 import internal.KotlinTextDocumentService
 import internal.KotlinWorkspaceService
+import internal.analyzer.configuration.ServerConfig
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
 import java.util.concurrent.CompletableFuture
@@ -10,7 +11,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 data class KotlinAnalyzerServer(
     val textDocumentService: KotlinTextDocumentService,
-    val workspaceService: KotlinWorkspaceService
+    val workspaceService: KotlinWorkspaceService,
+    val serverConfig: ServerConfig
 ) : LanguageServer, LanguageClientAware {
 
     private val client: AtomicReference<LanguageClient?> = AtomicReference(null)

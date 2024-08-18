@@ -10,6 +10,7 @@ repositories {
 }
 
 dependencies {
+    implementation(libs.clikt)
     implementation(libs.lsp4j)
     implementation(libs.lsp4j.jsonrpc)
     implementation(libs.slf4j.jul)
