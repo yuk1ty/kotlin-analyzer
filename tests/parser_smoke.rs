@@ -6,10 +6,10 @@ fn parses_basic_declarations_without_errors() {
         package demo
         import demo.Foo
 
-        class Foo {}
+        class Foo<T>(val value: T) : Bar<Baz> {}
 
-        fun bar() {
-            val x = 1
+        fun <T> bar(x: T, y: List<String?> = listOf("x")): List<T> {
+            val x = 1 + 2
         }
     "#;
 

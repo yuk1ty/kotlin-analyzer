@@ -30,6 +30,8 @@ pub enum Token {
     Arrow,
     Question,
     At,
+    LAngle,
+    RAngle,
     Op(String),
 }
 
@@ -80,6 +82,8 @@ fn lexer<'src>(
         just('}').to(Token::RBrace),
         just('[').to(Token::LBracket),
         just(']').to(Token::RBracket),
+        just('<').to(Token::LAngle),
+        just('>').to(Token::RAngle),
         just(',').to(Token::Comma),
         just('.').to(Token::Dot),
         just(':').to(Token::Colon),
@@ -89,7 +93,7 @@ fn lexer<'src>(
         just('@').to(Token::At),
     ));
 
-    let op = one_of("+-*/%!=<>|&^")
+    let op = one_of("+-*/%!=|&^")
         .repeated()
         .at_least(1)
         .collect::<String>()
