@@ -21,7 +21,7 @@ pub fn parse(tokens: &[SpannedToken], text: &str) -> (Option<File>, Vec<Diagnost
 }
 
 fn diag_from_parse_error(text: &str, err: Simple<'_, Token>) -> Diagnostic {
-    let span = err.span().clone();
+    let span = *err.span();
     let range = super::span_to_range(text, span);
     let message = match err.found() {
         Some(found) => format!("Unexpected token: {found:?}"),
@@ -43,8 +43,7 @@ where
     let semi = just(Token::Semi).or_not();
 
     let qualified = ident
-        .clone()
-        .then(just(Token::Dot).ignore_then(ident.clone()).repeated())
+        .then(just(Token::Dot).ignore_then(ident).repeated())
         .ignored();
 
     let package_decl = just(Token::Package)
@@ -101,7 +100,6 @@ where
             .ignored();
 
         let simple_type = ident
-            .clone()
             .then(type_args.or_not())
             .ignored();
 
@@ -128,7 +126,6 @@ where
     });
 
     let type_params = ident
-        .clone()
         .then(just(Token::Colon).ignore_then(type_ref.clone()).or_not())
         .ignored()
         .separated_by(just(Token::Comma))
@@ -146,7 +143,7 @@ where
 
         let atom = choice((
             literal.ignored(),
-            ident.clone().ignored(),
+            ident.ignored(),
             expr.clone()
                 .delimited_by(just(Token::LParen), just(Token::RParen))
                 .ignored(),
@@ -168,7 +165,7 @@ where
             .then(
                 choice((
                     call_args.clone(),
-                    just(Token::Dot).ignore_then(ident.clone()).ignored(),
+                    just(Token::Dot).ignore_then(ident).ignored(),
                 ))
                 .repeated(),
             )
@@ -190,7 +187,7 @@ where
     let params = just(Token::Val)
         .or(just(Token::Var))
         .or_not()
-        .ignore_then(ident.clone())
+        .ignore_then(ident)
         .then(just(Token::Colon).ignore_then(type_ref.clone()).or_not())
         .then(just(Token::Eq).ignore_then(expr.clone()).or_not())
         .ignored()
@@ -233,7 +230,7 @@ where
     let params_clone = params.clone();
     let fun_decl = just(Token::Fun)
         .ignore_then(type_params.clone().or_not())
-        .ignore_then(ident.clone())
+        .ignore_then(ident)
         .then_ignore(type_params.clone().or_not())
         .then_ignore(params)
         .then_ignore(type_annotation.clone())
@@ -245,7 +242,7 @@ where
         .map(|name| Decl::Fun(FunDecl { name }));
 
     let class_decl = just(Token::Class)
-        .ignore_then(ident.clone())
+        .ignore_then(ident)
         .then_ignore(type_params.clone().or_not())
         .then_ignore(params_clone.or_not())
         .then_ignore(

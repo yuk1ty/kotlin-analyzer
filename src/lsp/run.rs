@@ -9,7 +9,7 @@ pub async fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let stdin = stdin();
     let stdout = stdout();
 
-    let (service, socket) = LspService::new(|client| Backend::new(client));
+    let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
     Ok(())
 }

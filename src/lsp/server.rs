@@ -15,10 +15,10 @@ use tracing::{info, warn};
 
 use crate::analysis::SymbolIndex;
 use crate::diagnostics::to_lsp_diagnostic;
-use crate::gradle::{run_gradle_classpath, GradleClasspath};
+use crate::gradle::{GradleClasspath, run_gradle_classpath};
 use crate::index::WorkspaceIndex;
 use crate::parser;
-use crate::text::{position_to_char_idx, DocumentStore};
+use crate::text::{DocumentStore, position_to_char_idx};
 
 pub struct Backend {
     client: Client,
@@ -42,7 +42,10 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> tower_lsp::jsonrpc::Result<InitializeResult> {
+    async fn initialize(
+        &self,
+        params: InitializeParams,
+    ) -> tower_lsp::jsonrpc::Result<InitializeResult> {
         let roots = collect_workspace_roots(&params);
         {
             let mut store = self.workspace_roots.write().await;
@@ -120,10 +123,10 @@ impl LanguageServer for Backend {
                 };
                 let cache = gradle_cache.clone();
                 let root_clone = root.clone();
-                tokio::task::spawn_blocking(move || run_gradle_classpath(&path))
-                    .await
-                    .ok()
-                    .map(|result| match result {
+                if let Ok(result) =
+                    tokio::task::spawn_blocking(move || run_gradle_classpath(&path)).await
+                {
+                    match result {
                         Ok(classpath) => {
                             let mut store = cache.blocking_write();
                             store.insert(root_clone, classpath);
@@ -131,7 +134,8 @@ impl LanguageServer for Backend {
                         Err(err) => {
                             warn!(?err, "gradle classpath task failed");
                         }
-                    });
+                    }
+                };
             }
         });
     }
@@ -218,10 +222,7 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> tower_lsp::jsonrpc::Result<Option<GotoDefinitionResponse>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri;
+        let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
         let (text_snapshot, rope_snapshot) = {
@@ -241,10 +242,7 @@ impl LanguageServer for Backend {
         if !workspace_locations.is_empty() {
             let response = if workspace_locations.len() == 1 {
                 GotoDefinitionResponse::Scalar(
-                    workspace_locations
-                        .into_iter()
-                        .next()
-                        .expect("non-empty"),
+                    workspace_locations.into_iter().next().expect("non-empty"),
                 )
             } else {
                 GotoDefinitionResponse::Array(workspace_locations)
@@ -287,11 +285,7 @@ fn collect_workspace_roots(params: &InitializeParams) -> Vec<Url> {
         return roots;
     }
 
-    params
-        .root_uri
-        .iter()
-        .cloned()
-        .collect::<Vec<_>>()
+    params.root_uri.iter().cloned().collect::<Vec<_>>()
 }
 
 fn identifier_at_position(

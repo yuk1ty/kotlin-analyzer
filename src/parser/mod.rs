@@ -8,11 +8,11 @@ use chumsky::span::SimpleSpan;
 use crate::diagnostics::{Diagnostic, Severity, TextRange};
 
 pub use ast::{ClassDecl, Decl, File, FunDecl, Ident, Mutability, PropertyDecl};
-pub fn parse<'src>(text: &'src str) -> Vec<Diagnostic> {
+pub fn parse(text: &str) -> Vec<Diagnostic> {
     parse_with_ast(text).1
 }
 
-pub fn parse_with_ast<'src>(text: &'src str) -> (Option<File>, Vec<Diagnostic>) {
+pub fn parse_with_ast(text: &str) -> (Option<File>, Vec<Diagnostic>) {
     let (tokens, lex_errors) = lexer::lex(text);
     let mut diagnostics = lex_errors
         .into_iter()
@@ -25,7 +25,7 @@ pub fn parse_with_ast<'src>(text: &'src str) -> (Option<File>, Vec<Diagnostic>) 
 }
 
 fn diag_from_lex_error(text: &str, err: Simple<'_, char>) -> Diagnostic {
-    let span = err.span().clone();
+    let span = *err.span();
     let range = span_to_range(text, span);
     let message = match err.found() {
         Some(found) => format!("Unexpected character: {found:?}"),

@@ -92,7 +92,7 @@ fn write_init_script() -> Result<(PathBuf, PathBuf), std::io::Error> {
     // Ensure the output path is absolute for Gradle.
     let output_file = output_file
         .canonicalize()
-        .unwrap_or_else(|_| output_file);
+        .unwrap_or(output_file);
 
     Ok((init_script, output_file))
 }
