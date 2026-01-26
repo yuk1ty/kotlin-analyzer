@@ -35,11 +35,10 @@ fn parser<'src, I>() -> impl Parser<'src, I, File, extra::Err<Simple<'src, Token
 where
     I: ValueInput<'src, Token = Token, Span = SimpleSpan<usize>>,
 {
-    let ident = select! { Token::Ident(name) => name }
-        .map_with(|name, e| Ident {
-            name,
-            span: e.span(),
-        });
+    let ident = select! { Token::Ident(name) => name }.map_with(|name, e| Ident {
+        name,
+        span: e.span(),
+    });
     let semi = just(Token::Semi).or_not();
 
     let qualified = ident
@@ -89,19 +88,23 @@ where
     });
 
     let type_ref = recursive(|type_ref| {
-        let type_args = type_ref
-            .clone()
-            .map(|_| ())
-            .or(select! { Token::Op(op) if op == "*" => () })
+        let type_arg = choice((
+            just(Token::In)
+                .or(just(Token::Out))
+                .or_not()
+                .ignore_then(type_ref.clone())
+                .map(|_| ()),
+            select! { Token::Op(op) if op == "*" => () },
+        ));
+
+        let type_args = type_arg
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(just(Token::LAngle), just(Token::RAngle))
             .ignored();
 
-        let simple_type = ident
-            .then(type_args.or_not())
-            .ignored();
+        let simple_type = ident.then(type_args.or_not()).ignored();
 
         let func_type = type_ref
             .clone()
@@ -111,9 +114,9 @@ where
             .or_not()
             .map(|items| items.unwrap_or_default())
             .delimited_by(just(Token::LParen), just(Token::RParen))
-        .then_ignore(just(Token::Arrow))
-        .then(type_ref.clone())
-        .ignored();
+            .then_ignore(just(Token::Arrow))
+            .then(type_ref.clone())
+            .ignored();
 
         let parenthesized = type_ref
             .clone()
@@ -139,15 +142,58 @@ where
             Token::Int(_) => (),
             Token::String(_) => (),
             Token::Char(_) => (),
+            Token::True => (),
+            Token::False => (),
+            Token::Null => (),
         };
 
+        let if_expr = just(Token::If)
+            .ignore_then(
+                expr.clone()
+                    .delimited_by(just(Token::LParen), just(Token::RParen)),
+            )
+            .then(expr.clone())
+            .then(just(Token::Else).ignore_then(expr.clone()).or_not())
+            .ignored();
+
+        let when_expr = just(Token::When)
+            .ignore_then(
+                expr.clone()
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .or_not(),
+            )
+            .then_ignore(
+                balanced
+                    .clone()
+                    .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                    .ignored(),
+            )
+            .ignored();
+
+        let control_expr = choice((
+            just(Token::Return)
+                .ignore_then(expr.clone().or_not())
+                .ignored(),
+            just(Token::Throw).ignore_then(expr.clone()).ignored(),
+            just(Token::Break).ignored(),
+            just(Token::Continue).ignored(),
+        ));
+
         let atom = choice((
+            if_expr,
+            when_expr,
+            control_expr,
             literal.ignored(),
-            ident.ignored(),
+            just(Token::This).ignored(),
+            just(Token::Super).ignored(),
+            ident.clone().ignored(),
             expr.clone()
                 .delimited_by(just(Token::LParen), just(Token::RParen))
                 .ignored(),
-            balanced.clone().delimited_by(just(Token::LBrace), just(Token::RBrace)).ignored(),
+            balanced
+                .clone()
+                .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                .ignored(),
         ));
 
         let call_args = expr
@@ -160,12 +206,23 @@ where
             .delimited_by(just(Token::LParen), just(Token::RParen))
             .ignored();
 
+        let index_args = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .or_not()
+            .map(|items| items.unwrap_or_default())
+            .delimited_by(just(Token::LBracket), just(Token::RBracket))
+            .ignored();
+
         let postfix = atom
             .clone()
             .then(
                 choice((
                     call_args.clone(),
-                    just(Token::Dot).ignore_then(ident).ignored(),
+                    index_args.clone(),
+                    just(Token::Dot).ignore_then(ident.clone()).ignored(),
                 ))
                 .repeated(),
             )
@@ -176,6 +233,11 @@ where
             just(Token::LAngle).ignored(),
             just(Token::RAngle).ignored(),
             just(Token::Eq).ignored(),
+            just(Token::In).ignored(),
+            just(Token::Is).ignored(),
+            just(Token::As).ignored(),
+            just(Token::Question).ignored(),
+            just(Token::Colon).ignored(),
         ));
 
         postfix
@@ -197,16 +259,16 @@ where
         .or_not()
         .map(|items| items.unwrap_or_default())
         .delimited_by(just(Token::LParen), just(Token::RParen))
-    .recover_with(via_parser(nested_delimiters(
-        Token::LParen,
-        Token::RParen,
-        [
-            (Token::LBrace, Token::RBrace),
-            (Token::LBracket, Token::RBracket),
-        ],
-        |_| Vec::new(),
-    )))
-    .ignored();
+        .recover_with(via_parser(nested_delimiters(
+            Token::LParen,
+            Token::RParen,
+            [
+                (Token::LBrace, Token::RBrace),
+                (Token::LBracket, Token::RBracket),
+            ],
+            |_| Vec::new(),
+        )))
+        .ignored();
 
     let type_annotation = just(Token::Colon)
         .ignore_then(type_ref.clone())
@@ -247,7 +309,12 @@ where
         .then_ignore(params_clone.or_not())
         .then_ignore(
             just(Token::Colon)
-                .ignore_then(type_ref.clone().separated_by(just(Token::Comma)).allow_trailing())
+                .ignore_then(
+                    type_ref
+                        .clone()
+                        .separated_by(just(Token::Comma))
+                        .allow_trailing(),
+                )
                 .or_not()
                 .ignored(),
         )

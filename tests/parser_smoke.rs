@@ -10,6 +10,9 @@ fn parses_basic_declarations_without_errors() {
 
         fun <T> bar(x: T, y: List<String?> = listOf("x")): List<T> {
             val x = 1 + 2
+            val y = if (x > 0) { x } else { 0 }
+            val z = when (y) { 0 -> 1 else -> 2 }
+            val f = { a: Int -> a + 1 }
         }
     "#;
 
