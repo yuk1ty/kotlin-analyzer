@@ -6,16 +6,16 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tower_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, InitializeResult,
-    InitializedParams, Location, OneOf, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, Url,
+    ExecuteCommandOptions, ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse,
+    InitializeParams, InitializeResult, InitializedParams, Location, OneOf, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
 use tower_lsp::{Client, LanguageServer};
 use tracing::{info, warn};
 
 use crate::analysis::SymbolIndex;
 use crate::diagnostics::to_lsp_diagnostic;
-use crate::gradle::{GradleClasspath, run_gradle_classpath};
+use crate::gradle::{compute_gradle_fingerprint, run_gradle_classpath, GradleCacheEntry};
 use crate::index::WorkspaceIndex;
 use crate::parser;
 use crate::text::{DocumentStore, position_to_char_idx};
@@ -25,7 +25,7 @@ pub struct Backend {
     documents: Arc<RwLock<DocumentStore>>,
     workspace_index: Arc<RwLock<WorkspaceIndex>>,
     workspace_roots: Arc<RwLock<Vec<Url>>>,
-    gradle_cache: Arc<RwLock<HashMap<Url, GradleClasspath>>>,
+    gradle_cache: Arc<RwLock<HashMap<Url, GradleCacheEntry>>>,
 }
 
 impl Backend {
@@ -57,6 +57,10 @@ impl LanguageServer for Backend {
                 TextDocumentSyncKind::INCREMENTAL,
             )),
             definition_provider: Some(OneOf::Left(true)),
+            execute_command_provider: Some(ExecuteCommandOptions {
+                commands: vec!["kotlin-analyzer.refreshGradle".to_string()],
+                ..ExecuteCommandOptions::default()
+            }),
             ..ServerCapabilities::default()
         };
 
@@ -118,24 +122,23 @@ impl LanguageServer for Backend {
         };
         tokio::spawn(async move {
             for root in roots {
-                let Ok(path) = root.to_file_path() else {
-                    continue;
+                refresh_gradle_root(root, gradle_cache.clone(), true).await;
+            }
+        });
+
+        let gradle_cache = self.gradle_cache.clone();
+        let workspace_roots = self.workspace_roots.clone();
+        tokio::spawn(async move {
+            let mut ticker = interval(Duration::from_secs(30));
+            loop {
+                ticker.tick().await;
+                let roots = {
+                    let store = workspace_roots.read().await;
+                    store.clone()
                 };
-                let cache = gradle_cache.clone();
-                let root_clone = root.clone();
-                if let Ok(result) =
-                    tokio::task::spawn_blocking(move || run_gradle_classpath(&path)).await
-                {
-                    match result {
-                        Ok(classpath) => {
-                            let mut store = cache.blocking_write();
-                            store.insert(root_clone, classpath);
-                        }
-                        Err(err) => {
-                            warn!(?err, "gradle classpath task failed");
-                        }
-                    }
-                };
+                for root in roots {
+                    refresh_gradle_root(root, gradle_cache.clone(), false).await;
+                }
             }
         });
     }
@@ -275,6 +278,25 @@ impl LanguageServer for Backend {
             Ok(Some(GotoDefinitionResponse::Array(locations)))
         }
     }
+
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<serde_json::Value>> {
+        if params.command != "kotlin-analyzer.refreshGradle" {
+            return Ok(None);
+        }
+
+        let roots = parse_gradle_roots(&params.arguments, &self.workspace_roots).await;
+
+        let mut refreshed = 0usize;
+        for root in roots {
+            refresh_gradle_root(root, self.gradle_cache.clone(), true).await;
+            refreshed += 1;
+        }
+
+        Ok(Some(serde_json::json!({ "refreshed": refreshed })))
+    }
 }
 
 fn collect_workspace_roots(params: &InitializeParams) -> Vec<Url> {
@@ -286,6 +308,75 @@ fn collect_workspace_roots(params: &InitializeParams) -> Vec<Url> {
     }
 
     params.root_uri.iter().cloned().collect::<Vec<_>>()
+}
+
+async fn parse_gradle_roots(
+    args: &[serde_json::Value],
+    workspace_roots: &Arc<RwLock<Vec<Url>>>,
+) -> Vec<Url> {
+    if args.is_empty() {
+        let store = workspace_roots.read().await;
+        return store.clone();
+    }
+
+    if let Some(first) = args.first() {
+        if let Some(value) = first.as_str() {
+            if let Ok(uri) = Url::parse(value) {
+                return vec![uri];
+            }
+            let path = std::path::PathBuf::from(value);
+            if let Ok(uri) = Url::from_file_path(path) {
+                return vec![uri];
+            }
+        }
+    }
+
+    let store = workspace_roots.read().await;
+    store.clone()
+}
+
+async fn refresh_gradle_root(
+    root: Url,
+    cache: Arc<RwLock<HashMap<Url, GradleCacheEntry>>>,
+    force: bool,
+) {
+    let Ok(path) = root.to_file_path() else {
+        return;
+    };
+
+    let Some(fingerprint) = compute_gradle_fingerprint(&path) else {
+        return;
+    };
+
+    if !force {
+        let cached = {
+            let store = cache.read().await;
+            store.get(&root).map(|entry| entry.fingerprint)
+        };
+        if cached == Some(fingerprint) {
+            return;
+        }
+    }
+
+    let root_clone = root.clone();
+    let cache_clone = cache.clone();
+    let result = tokio::task::spawn_blocking(move || run_gradle_classpath(&path)).await;
+    match result {
+        Ok(Ok(classpath)) => {
+            let entry = GradleCacheEntry {
+                classpath,
+                fingerprint,
+            };
+            let mut store = cache_clone.write().await;
+            store.insert(root_clone, entry);
+        }
+        Ok(Err(err)) => {
+            warn!(?err, "gradle classpath task failed");
+        }
+        Err(err) => {
+            warn!(?err, "gradle classpath task panicked");
+        }
+    }
 }
 
 fn identifier_at_position(

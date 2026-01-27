@@ -69,8 +69,9 @@
 - Added workspace index with periodic refresh and open-file exclusion.
 - Implemented AST + symbol indexing; definition jumps within file and across workspace.
 - Added Gradle classpath runner (init script + JSON output) and startup cache.
+- Added Gradle cache fingerprinting and manual refresh command with periodic update checks.
 
 ## Immediate Next Steps
 1) Expand Kotlin grammar subset (types/params/expressions) as needed
-2) Gradle cache refresh strategy (mtime/hash + manual trigger)
+2) Gradle cache refresh strategy (mtime/hash + manual trigger) ✅
 3) VSCode/Neovim integration and documentation

@@ -1,3 +1,5 @@
+mod fingerprint;
 mod runner;
 
-pub use runner::{GradleClasspath, GradleError, GradleModule, run_gradle_classpath};
+pub use fingerprint::{compute_gradle_fingerprint, GradleCacheEntry, GradleFingerprint};
+pub use runner::{run_gradle_classpath, GradleClasspath, GradleError, GradleModule};
